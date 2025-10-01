@@ -1,0 +1,182 @@
+// EVSpy Database Schema
+// EV charging station price comparison for Australia
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// User accounts and authentication
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String?
+  password      String?
+  emailVerified DateTime?
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  accounts      Account[]
+  sessions      Session[]
+  priceReports  PriceReport[]
+  reviews       Review[]
+  favorites     UserFavorite[]
+
+  @@map("users")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+// Charging stations from OpenChargeMap and other sources
+model ChargingStation {
+  id              String  @id @default(cuid())
+  ocmId           Int?    @unique // OpenChargeMap ID
+  name            String
+  description     String?
+  latitude        Float
+  longitude       Float
+  address         String
+  suburb          String?
+  state           String
+  postcode        String?
+  country         String  @default("Australia")
+  
+  // Station details
+  network         String? // Chargefox, Evie, Tesla, etc.
+  operator        String?
+  website         String?
+  phone           String?
+  email           String?
+  
+  // Technical details
+  connectorTypes  String? // Comma-separated: Type 2, CCS, CHAdeMO, Tesla
+  powerKw         Float?   // Maximum power rating
+  numConnectors   Int?     // Number of charging points
+  
+  // Status and verification
+  isVerified      Boolean  @default(false)
+  isActive        Boolean  @default(true)
+  lastVerified    DateTime?
+  
+  // Metadata
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  // Relations
+  priceReports    PriceReport[]
+  reviews         Review[]
+  favorites       UserFavorite[]
+
+  @@map("charging_stations")
+}
+
+// User-submitted pricing data
+model PriceReport {
+  id              String          @id @default(cuid())
+  stationId       String
+  userId          String?
+  
+  // Pricing details
+  pricePerKwh     Float?          // Price per kWh in AUD
+  sessionFee      Float?          // Connection/session fee in AUD
+  parkingFee      Float?          // Parking fee per hour in AUD
+  idleFee         Float?          // Idle fee per minute in AUD
+  
+  // Time and conditions
+  timeOfDay       String?         // "peak", "off-peak", "weekend"
+  connectorType   String?         // Which connector type this price applies to
+  powerKw         Float?          // Power level for this price
+  
+  // Verification
+  isVerified      Boolean         @default(false)
+  verificationMethod String?      // "receipt", "photo", "app_screenshot"
+  confidence      Int             @default(1) // 1-5 confidence score
+  
+  // Metadata
+  reportedAt      DateTime        @default(now())
+  validFrom       DateTime?
+  validUntil      DateTime?
+  createdAt       DateTime        @default(now())
+  
+  // Relations
+  station         ChargingStation @relation(fields: [stationId], references: [id])
+  user            User?           @relation(fields: [userId], references: [id])
+
+  @@map("price_reports")
+}
+
+// User reviews and ratings
+model Review {
+  id          String          @id @default(cuid())
+  stationId   String
+  userId      String
+  
+  // Review content
+  rating      Int             // 1-5 stars
+  title       String?
+  comment     String?
+  
+  // Review categories
+  accessibility Int?          // 1-5 rating for accessibility
+  reliability   Int?          // 1-5 rating for reliability
+  location      Int?          // 1-5 rating for location convenience
+  
+  // Metadata
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  
+  // Relations
+  station     ChargingStation @relation(fields: [stationId], references: [id])
+  user        User            @relation(fields: [userId], references: [id])
+
+  @@unique([stationId, userId]) // One review per user per station
+  @@map("reviews")
+}
+
+// User favorites/bookmarks
+model UserFavorite {
+  id        String          @id @default(cuid())
+  userId    String
+  stationId String
+  createdAt DateTime        @default(now())
+  
+  // Relations
+  user      User            @relation(fields: [userId], references: [id])
+  station   ChargingStation @relation(fields: [stationId], references: [id])
+
+  @@unique([userId, stationId])
+  @@map("user_favorites")
+}
