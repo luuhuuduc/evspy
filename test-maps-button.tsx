@@ -1,6 +1,6 @@
 // Test the Google Maps button functionality
 import React from 'react'
-import GoogleMapsButton from '../src/components/GoogleMapsButton'
+import GoogleMapsButton from './src/components/GoogleMapsButton'
 
 function TestGoogleMapsButton() {
   return (

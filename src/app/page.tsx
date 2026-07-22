@@ -122,10 +122,10 @@ export default function Home() {
           <h3 className="text-2xl font-semibold mb-6 text-center">Supported Networks</h3>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {[
-              { name: 'Chargefox', color: 'orange' },
-              { name: 'Evie Networks', color: 'green' },
-              { name: 'Tesla Supercharger', color: 'red' },
-              { name: 'BP Pulse', color: 'teal' }
+              { name: 'Chargefox', bg: 'bg-orange-100', text: 'text-orange-600' },
+              { name: 'Evie Networks', bg: 'bg-green-100', text: 'text-green-600' },
+              { name: 'Tesla Supercharger', bg: 'bg-red-100', text: 'text-red-600' },
+              { name: 'BP Pulse', bg: 'bg-teal-100', text: 'text-teal-600' }
             ].map((network) => (
               <Link
                 key={network.name}
@@ -133,8 +133,8 @@ export default function Home() {
                 className="bg-gray-50 rounded-lg p-4 hover:bg-gray-100 transition-colors"
               >
                 <div className="text-center">
-                  <div className={`h-12 w-12 bg-${network.color}-100 rounded-full flex items-center justify-center mx-auto mb-2`}>
-                    <Zap className={`h-6 w-6 text-${network.color}-600`} />
+                  <div className={`h-12 w-12 ${network.bg} rounded-full flex items-center justify-center mx-auto mb-2`}>
+                    <Zap className={`h-6 w-6 ${network.text}`} />
                   </div>
                   <span className="text-sm font-medium">{network.name}</span>
                 </div>

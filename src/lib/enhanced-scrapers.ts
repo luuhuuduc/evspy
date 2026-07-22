@@ -3,7 +3,7 @@ import puppeteer, { Browser, Page } from 'puppeteer'
 import { prisma } from './prisma'
 import { reverseGeocodeWithCache, extractLocationName } from './geocoding'
 
-interface StationData {
+export interface StationData {
   externalId?: string
   name: string
   network: string
@@ -123,13 +123,11 @@ export class EnhancedEVScraper {
 
       if (graphqlData && Array.isArray(graphqlData)) {
         // Process the GraphQL response data
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         for (const location of graphqlData as unknown[]) {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const loc = location as any // Temporary cast until we define proper interface
           if (!loc.chargeStations || loc.chargeStations.length === 0) continue
           
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           for (let stationIndex = 0; stationIndex < loc.chargeStations.length; stationIndex++) {
             const station = loc.chargeStations[stationIndex]
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -165,7 +163,7 @@ export class EnhancedEVScraper {
             let addressInfo
             try {
               addressInfo = await reverseGeocodeWithCache(loc.lat, loc.lng)
-            } catch (error) {
+            } catch (_error) {
               console.warn('Reverse geocoding failed for', loc.lat, loc.lng)
               addressInfo = null
             }
@@ -220,98 +218,242 @@ export class EnhancedEVScraper {
   }
 
   /**
-   * Scrape PlugShare - Community-driven charging data
+   * Scrape PlugShare - Community-driven charging data using API interception
    */
   async scrapePlugShare(): Promise<StationData[]> {
-    console.log('🔌 Starting PlugShare scraping...')
+    console.log('🔌 Starting PlugShare API scraping...')
     const stations: StationData[] = []
 
     try {
       const page = await this.createPage()
       
-      // Navigate to PlugShare Australia
-      console.log('📍 Loading PlugShare Australia...')
-      await page.goto('https://www.plugshare.com/?country=AU', {
+      // Set up API response interception for PlugShare
+      let apiData: unknown = null
+      page.on('response', async (response) => {
+        const url = response.url()
+        
+        // Look for PlugShare API endpoints
+        if (url.includes('plugshare.com/api') || 
+            url.includes('/locations') || 
+            url.includes('/stations') ||
+            url.includes('graphql') ||
+            url.includes('/api/')) {
+          
+          try {
+            const responseText = await response.text()
+            const jsonData = JSON.parse(responseText)
+            
+            console.log(`📡 PlugShare API found: ${url}`)
+            console.log(`📊 Response keys:`, Object.keys(jsonData))
+            
+            // Look for station data patterns
+            if (jsonData.data || jsonData.locations || jsonData.stations || Array.isArray(jsonData)) {
+              console.log(`🎯 Found PlugShare station data!`)
+              apiData = jsonData
+            }
+            
+          } catch (_parseError) {
+            // Ignore non-JSON responses - already got responseText above
+            console.log(`📄 PlugShare response (non-JSON): ${url}`)
+          }
+        }
+      })
+      
+      // Navigate to PlugShare Australia with specific bounds
+      console.log('📍 Loading PlugShare Australia map...')
+      await page.goto('https://www.plugshare.com/', {
         waitUntil: 'networkidle2',
         timeout: 30000
       })
-
+      
+      // Wait for initial load
+      await new Promise(resolve => setTimeout(resolve, 3000))
+      
+      // Try to set location to Australia and zoom to populated area
+      console.log('🌏 Setting location to Australia...')
+      await page.evaluate(() => {
+        // Try to set the map to Australia coordinates
+        if (typeof window !== 'undefined' && (window as unknown as { setMapLocation?: (lat: number, lng: number, zoom: number) => void }).setMapLocation) {
+          (window as unknown as { setMapLocation: (lat: number, lng: number, zoom: number) => void }).setMapLocation(-33.8688, 151.2093, 10)
+        }
+        
+        // Alternative: try to find and use search box
+        const searchBox = document.querySelector('input[placeholder*="Search"], input[type="search"], #search') as HTMLInputElement
+        if (searchBox) {
+          searchBox.value = 'Sydney, Australia'
+          searchBox.dispatchEvent(new Event('input', { bubbles: true }))
+          searchBox.dispatchEvent(new Event('change', { bubbles: true }))
+        }
+      })
+      
       await new Promise(resolve => setTimeout(resolve, 5000))
-
-      // Extract PlugShare station data
-      const plugshareData = await page.evaluate(() => {
-        const results: Array<{
-          name?: string;
-          address?: string;
-          priceText?: string;
-          prices?: number[];
-          network?: string;
-        }> = []
+      
+      // Try clicking on map to trigger station loading
+      console.log('🗺️ Interacting with map to load stations...')
+      await page.evaluate(() => {
+        const mapContainer = document.querySelector('#map, .map-container, [class*="map"]') as HTMLElement
+        if (mapContainer) {
+          // Simulate click events to trigger API calls
+          const clickEvent = new MouseEvent('click', {
+            view: window,
+            bubbles: true,
+            cancelable: true,
+            clientX: 600,
+            clientY: 400
+          })
+          mapContainer.dispatchEvent(clickEvent)
+        }
+      })
+      
+      // Wait for potential API calls
+      await new Promise(resolve => setTimeout(resolve, 8000))
+      
+      // Process any intercepted API data
+      if (apiData) {
+        console.log('🔍 Processing PlugShare API data...')
         
-        // PlugShare uses different selectors
-        const markers = document.querySelectorAll('.marker, .station-marker, [data-station-id]')
+        let stationList: unknown[] = []
         
-        markers.forEach((marker, index) => {
-          try {
-            const stationInfo: { [key: string]: string | number | undefined | number[] } = {}
-            
-            // Get station details from marker or nearby elements
-            const titleEl = marker.querySelector('.station-title, .name, h3')
-            if (titleEl) stationInfo.name = titleEl.textContent?.trim()
-            
-            const addressEl = marker.querySelector('.address, .location')
-            if (addressEl) stationInfo.address = addressEl.textContent?.trim()
-            
-            // PlugShare often has pricing in reviews or comments
-            const priceEl = marker.querySelector('.price, .cost, .recent-price')
-            if (priceEl) {
-              const priceText = priceEl.textContent?.trim()
-              stationInfo.priceText = priceText
-              const priceMatch = priceText?.match(/\$(\d+\.?\d*)/g)
-              if (priceMatch) {
-                stationInfo.prices = priceMatch.map(p => parseFloat(p.replace('$', '')))
-              }
-            }
-            
-            // Network information
-            const networkEl = marker.querySelector('.network, .operator')
-            if (networkEl) stationInfo.network = networkEl.textContent?.trim()
-            
-            if (stationInfo.name) {
-              results.push(stationInfo)
-            }
-          } catch (e) {
-            console.log(`Error parsing PlugShare station ${index}:`, e)
+        // Handle different API response structures
+        if (Array.isArray(apiData)) {
+          stationList = apiData
+        } else if (typeof apiData === 'object' && apiData !== null) {
+          const data = apiData as Record<string, unknown>
+          if (data.data && Array.isArray(data.data)) {
+            stationList = data.data
+          } else if (data.locations && Array.isArray(data.locations)) {
+            stationList = data.locations
+          } else if (data.stations && Array.isArray(data.stations)) {
+            stationList = data.stations
           }
+        }
+        
+        console.log(`📍 Processing ${stationList.length} PlugShare stations...`)
+        
+        for (const stationData of stationList) {
+          try {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const station = stationData as any
+            
+            if (station.latitude && station.longitude) {
+              // Get better address using reverse geocoding
+              let addressInfo
+              try {
+                addressInfo = await reverseGeocodeWithCache(station.latitude, station.longitude)
+              } catch (_error) {
+                console.warn('Reverse geocoding failed for PlugShare station')
+                addressInfo = null
+              }
+              
+              const stationName = station.name || 
+                                  station.location_name || 
+                                  (addressInfo ? extractLocationName(addressInfo.formattedAddress) : `PlugShare Station`)
+              
+              // Extract pricing from various PlugShare fields
+              let pricePerKwh = station.price || station.cost || station.fee
+              if (typeof pricePerKwh === 'string') {
+                const priceMatch = pricePerKwh.match(/(\d+\.?\d*)/)
+                pricePerKwh = priceMatch ? parseFloat(priceMatch[1]) : undefined
+              }
+              
+              stations.push({
+                externalId: `plugshare-${station.id || stations.length}`,
+                name: stationName,
+                network: station.network || station.operator || 'PlugShare Community',
+                latitude: station.latitude,
+                longitude: station.longitude,
+                address: addressInfo?.formattedAddress || station.address || 'Community reported location',
+                suburb: addressInfo?.suburb || 'TBD',
+                state: addressInfo?.state || 'TBD',
+                postcode: addressInfo?.postcode || 'TBD',
+                connectorTypes: this.getPlugShareConnectorTypes(station.outlets || station.connectors),
+                powerKw: station.power || 22, // Default to AC charging
+                pricePerKwh: pricePerKwh,
+                sessionFee: 0, // PlugShare typically community pricing
+                lastUpdated: new Date(),
+                source: 'PLUGSHARE',
+                isOperational: station.status !== 'offline' && station.status !== 'unavailable',
+                amenities: ['Community Verified']
+              })
+            }
+          } catch (error) {
+            console.error('Error processing PlugShare station:', error)
+          }
+        }
+      }
+      
+      // Fallback: try DOM scraping if no API data found
+      if (stations.length === 0) {
+        console.log('🔄 Fallback to DOM scraping for PlugShare...')
+        
+        const domData = await page.evaluate(() => {
+          const results: Array<{
+            name?: string;
+            coords?: { lat: number; lng: number };
+            network?: string;
+          }> = []
+          
+          // Look for any visible station elements
+          const stationElements = document.querySelectorAll('[data-lat], [data-lng], .station, .location, .marker')
+          
+          stationElements.forEach((element) => {
+            const el = element as HTMLElement
+            const lat = parseFloat(el.dataset.lat || el.getAttribute('data-latitude') || '0')
+            const lng = parseFloat(el.dataset.lng || el.getAttribute('data-longitude') || '0')
+            
+            if (lat && lng) {
+              const name = el.textContent?.trim() || el.title || 'PlugShare Station'
+              results.push({
+                name: name,
+                coords: { lat, lng },
+                network: 'PlugShare Community'
+              })
+            }
+          })
+          
+          return results
         })
         
-        return results
-      })
-
-      // Process PlugShare data
-      for (const data of plugshareData) {
-        if (data.name) {
-          stations.push({
-            name: data.name,
-            network: data.network || 'PlugShare Community',
-            latitude: -33.8688, // Default to Sydney for now
-            longitude: 151.2093,
-            address: data.address || '',
-            pricePerKwh: data.prices?.[0],
-            lastUpdated: new Date(),
-            source: 'PLUGSHARE'
-          })
+        for (const station of domData) {
+          if (station.coords) {
+            stations.push({
+              name: station.name || 'PlugShare Station',
+              network: station.network || 'PlugShare Community',
+              latitude: station.coords.lat,
+              longitude: station.coords.lng,
+              address: 'Community reported location',
+              lastUpdated: new Date(),
+              source: 'PLUGSHARE'
+            })
+          }
         }
       }
 
       await page.close()
       console.log(`✅ PlugShare: Found ${stations.length} stations`)
-      
+      return stations
+
     } catch (error) {
       console.error('❌ PlugShare scraping error:', error)
+      return []
     }
+  }
 
-    return stations
+  private getPlugShareConnectorTypes(outlets: unknown[]): string {
+    if (!outlets || !Array.isArray(outlets)) return 'Unknown'
+    
+    const types: string[] = []
+    outlets.forEach(outlet => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const outletData = outlet as any
+      if (outletData.connector) {
+        types.push(outletData.connector)
+      } else if (outletData.type) {
+        types.push(outletData.type)
+      }
+    })
+    
+    return types.length > 0 ? types.join(', ') : 'Type 2, CCS2'
   }
 
   /**
