@@ -163,7 +163,7 @@ export class EnhancedEVScraper {
             let addressInfo
             try {
               addressInfo = await reverseGeocodeWithCache(loc.lat, loc.lng)
-            } catch (_error) {
+            } catch {
               console.warn('Reverse geocoding failed for', loc.lat, loc.lng)
               addressInfo = null
             }
@@ -252,7 +252,7 @@ export class EnhancedEVScraper {
               apiData = jsonData
             }
             
-          } catch (_parseError) {
+          } catch {
             // Ignore non-JSON responses - already got responseText above
             console.log(`📄 PlugShare response (non-JSON): ${url}`)
           }
@@ -340,7 +340,7 @@ export class EnhancedEVScraper {
               let addressInfo
               try {
                 addressInfo = await reverseGeocodeWithCache(station.latitude, station.longitude)
-              } catch (_error) {
+              } catch {
                 console.warn('Reverse geocoding failed for PlugShare station')
                 addressInfo = null
               }
