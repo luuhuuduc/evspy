@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
-import { MapPin, Zap, Star, DollarSign, Filter } from 'lucide-react'
+import { MapPin, Zap, Star, DollarSign } from 'lucide-react'
 import GoogleMapsButton from '../../components/GoogleMapsButton'
 
 interface ChargingStation {
@@ -107,6 +107,8 @@ export default function StationsPage() {
               <Link href="/" className="text-gray-700 hover:text-green-600">Home</Link>
               <Link href="/stations" className="text-green-600 font-medium">Find Stations</Link>
               <Link href="/submit-price" className="text-gray-700 hover:text-green-600">Submit Price</Link>
+              <Link href="/calculator" className="text-gray-700 hover:text-green-600">Savings Calculator</Link>
+              <Link href="/analytics" className="text-gray-700 hover:text-green-600">Analytics</Link>
             </nav>
           </div>
         </div>
@@ -115,36 +117,31 @@ export default function StationsPage() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Search and Filters */}
         <div className="bg-white rounded-lg shadow-sm p-6 mb-8">
-          <div className="flex flex-col lg:flex-row gap-4">
-            <div className="flex-1">
-              <input
-                type="text"
-                placeholder="Search by station name, address, or network..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-              />
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-col lg:flex-row gap-4">
+              <div className="flex-1">
+                <input
+                  type="text"
+                  placeholder="Search by station name, address, or network..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                />
+              </div>
+              <div className="lg:w-64">
+                <select
+                  value={selectedNetwork}
+                  onChange={(e) => setSelectedNetwork(e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                >
+                  {networks.map(network => (
+                    <option key={network} value={network === 'All Networks' ? '' : network}>
+                      {network}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
-            <div className="lg:w-64">
-              <select
-                value={selectedNetwork}
-                onChange={(e) => setSelectedNetwork(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-              >
-                {networks.map(network => (
-                  <option key={network} value={network === 'All Networks' ? '' : network}>
-                    {network}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <button
-              onClick={fetchStations}
-              className="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 flex items-center justify-center"
-            >
-              <Filter className="h-5 w-5 mr-2" />
-              Update
-            </button>
           </div>
         </div>
 

@@ -15,10 +15,11 @@ export default function Home() {
               <span className="ml-2 text-sm text-gray-500 font-medium">Australia</span>
             </div>
             <nav className="hidden md:flex space-x-8">
-              <Link href="/" className="text-gray-700 hover:text-green-600">Home</Link>
-              <Link href="/stations" className="text-gray-700 hover:text-green-600">Find Stations</Link>
-              <Link href="/submit-price" className="text-gray-700 hover:text-green-600">Submit Price</Link>
-              <Link href="/about" className="text-gray-700 hover:text-green-600">About</Link>
+              <Link href="/" className="text-gray-700 hover:text-green-600 font-medium">Home</Link>
+              <Link href="/stations" className="text-gray-700 hover:text-green-600 font-medium">Find Stations</Link>
+              <Link href="/submit-price" className="text-gray-700 hover:text-green-600 font-medium">Submit Price</Link>
+              <Link href="/calculator" className="text-gray-700 hover:text-green-600 font-medium">Savings Calculator</Link>
+              <Link href="/analytics" className="text-gray-700 hover:text-green-600 font-medium">Analytics</Link>
             </nav>
             <div className="flex items-center space-x-4">
               <Link
